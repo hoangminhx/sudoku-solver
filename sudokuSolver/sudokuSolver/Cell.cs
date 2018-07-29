@@ -14,6 +14,7 @@ namespace sudokuSolver
         }
 
         public int X { get; set; }
+        public int Y { get; set; }
 
         private int _bigX;
         public int BigX
@@ -39,9 +40,6 @@ namespace sudokuSolver
                 return _bigX;
             }
         }
-
-
-        public int Y { get; set; }
 
         private int _bigY;
         public int BigY
@@ -80,9 +78,19 @@ namespace sudokuSolver
             }
         }
 
-
-
         public bool IsChanged { get; private set; }
+
+        private List<int> _note;
+
+        public List<int> Note
+        {
+            get
+            {
+                return _note ?? new List<int>();
+            }
+            set { _note = value; }
+        }
+
 
         public void ResetChangeFlag()
         {

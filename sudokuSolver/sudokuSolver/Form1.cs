@@ -60,6 +60,31 @@ namespace sudokuSolver
             GetValueFromGrid();
             Solve();
         }
+        private void dataGridView1_EditingControlShowing(object sender, DataGridViewEditingControlShowingEventArgs e)
+        {
+            DataGridViewTextBoxEditingControl txt = (DataGridViewTextBoxEditingControl)e.Control;
+            txt.KeyUp -= new KeyEventHandler(Txt_KeyUp);
+            txt.KeyUp += new KeyEventHandler(Txt_KeyUp);
+        }
+
+        private void Txt_KeyUp(object sender, KeyEventArgs e)
+        {
+            TextBox txt = (TextBox)sender;
+            dataGridView1.CurrentCell.Value = txt.Text;
+
+            if (int.TryParse(txt.Text, out int temp))
+            {
+                DataGridViewCell currentCell = dataGridView1.CurrentCell;
+                if (currentCell.ColumnIndex < 8)
+                {
+                    dataGridView1.CurrentCell = dataGridView1.Rows[currentCell.RowIndex].Cells[currentCell.ColumnIndex + 1];
+                }
+                else if (currentCell.RowIndex < 8)
+                {
+                    dataGridView1.CurrentCell = dataGridView1.Rows[currentCell.RowIndex + 1].Cells[0];
+                }
+            }
+        }
 
         private void GetValueFromGrid()
         {
@@ -112,7 +137,6 @@ namespace sudokuSolver
         {
             #region solusion
 
-            /// * luu danh sach de so sanh
             /// 1. tim tung dong xem co dong nao trong 1 o khong
             /// 2. tim tung cot xem co cot nao trong 1 o khong
             /// 3. tim 9 o lon xem co o nao trong 1 o khong
@@ -164,6 +188,31 @@ namespace sudokuSolver
             /// 
             /// neu danh sach co thay doi thi cap nhat danh sach, lap lai tu dau 
             /// neu khong doi thi stop
+            /// 
+            /// neu ben tren chua giai het dc cac o
+            /// 8. Note lai nhung so co kha nang ton tai trong 1 o
+            /// 9. Duyet tu 1 den 9
+            ///    9.1 duyet qua tung dong
+            ///       9.1.1 dem xem so hien tai xuat hien bao nhieu lan
+            ///       9.1.2 neu 1 lan thi dien vao o do luon
+            ///          9.1.2.1 xoa so tuong ung trong note cua dong/cot/o lon
+            ///    9.2 duyet qua tung cot
+            ///       9.2.1 dem xem so hien tai xuat hien bao nhieu lan
+            ///       9.2.2 neu 1 lan thi dien vao o do luon
+            ///          9.2.2.1 xoa so tuong ung trong note cua dong/cot/o lon
+            ///    9.3 duyet qua tung o lon
+            ///       9.3.1 dem xem so hien tai xuat hien bao nhieu lan
+            ///       9.3.2 neu 1 lan thi dien vao o do luon
+            ///          9.3.2.1 xoa so tuong ung trong note cua dong/cot/o lon
+            /// 10. Duyet qua tung o lon
+            ///    10.1 tim nhung so trong note chi nam tren 1 dong
+            ///    10.2 xoa so tuong ung trong note cua dong do
+            ///    10.3 tim nhung so trong note chi nam tren 1 cot
+            ///    10.4 xoa so tuong ung trong note cua cot do
+            ///    10.5 lap lai tu buoc 9
+            /// 11. Duyet qua tung o trong, neu note chi co 1 phan tu thi
+            ///    11.1 dien vao o do luon
+            ///    11.2 xoa so tuong ung trong note cua dong/cot/o lon
 
             #endregion
 
@@ -184,7 +233,6 @@ namespace sudokuSolver
 
                 //5
                 CheckBlankCelsOnRows();
-
                 //6
                 CheckBlankCelsOnCols();
 
@@ -194,7 +242,235 @@ namespace sudokuSolver
                 isNew = cells.Any(c => c.IsChanged);
             }
 
+            if (cells.Any(c => c.Value == 0))
+            {
+                //8
+                TakeNote();
+                //9
+
+                isNew = true;
+                while (isNew)
+                {
+                    ResetChangeFlags();
+
+                    CheckIfNumberInNoteIsUniqueInUnit();
+
+                    int cntOfNotes = cells.SelectMany(c => c.Note).Count();
+                    CheckNoteInBigCellToClearOtherNotes();
+                    CheckIfNoteHaveOneNumber();
+                    CheckIfSetOfNumbersInNoteIsUniqueInUnit();
+                    int newCntOfNote = cells.SelectMany(c => c.Note).Count();
+
+                    isNew = cells.Any(c => c.IsChanged) || cntOfNotes != newCntOfNote;
+                }
+            }
+
             ShowValueToGrid();
+        }
+
+        private void CheckIfNumberInNoteIsUniqueInUnit()
+        {
+            //Check if number in note is unique in a row/col/big cell
+            for (int currentNum = 1; currentNum <= 9; currentNum++)
+            {
+                //9.1
+                var rows = cells.GroupBy(c => c.Y).Select(c => c.ToList());
+                foreach (var row in rows)
+                {
+                    var matchedCells = row.Where(c => c.Note.Contains(currentNum)).ToArray();
+                    if (matchedCells.Length == 1)
+                    {
+                        matchedCells[0].Value = currentNum;
+                        matchedCells[0].Note = new List<int>();
+                        ClearMatchedNote(matchedCells[0].Y, matchedCells[0].X, currentNum);
+                    }
+                }
+
+                //9.2
+                var cols = cells.GroupBy(c => c.X).Select(c => c.ToList());
+                foreach (var col in cols)
+                {
+                    var matchedCells = col.Where(c => c.Note.Contains(currentNum)).ToArray();
+                    if (matchedCells.Length == 1)
+                    {
+                        matchedCells[0].Value = currentNum;
+                        matchedCells[0].Note = new List<int>();
+                        ClearMatchedNote(matchedCells[0].Y, matchedCells[0].X, currentNum);
+                    }
+                }
+
+                //9.3
+                var bigCells = GetBigCells();
+                foreach (var bigCell in bigCells)
+                {
+                    var matchedCells = bigCell.Where(c => c.Note.Contains(currentNum)).ToArray();
+                    if (matchedCells.Length == 1)
+                    {
+                        matchedCells[0].Value = currentNum;
+                        matchedCells[0].Note = new List<int>();
+                        ClearMatchedNote(matchedCells[0].Y, matchedCells[0].X, currentNum);
+                    }
+                }
+            }
+        }
+
+        private void CheckIfSetOfNumbersInNoteIsUniqueInUnit()
+        {
+            ////Check if set of numbers in note is unique in a row/col/big cell
+            //var blankCells = cells.Where(c => c.Value == 0);
+            //foreach (var cell in blankCells)
+            //{
+            //    var currentNote = cell.Note;
+            //    //9.1
+            //    var rows = cells.GroupBy(c => c.Y).Select(c => c.ToList());
+            //    foreach (var row in rows)
+            //    {
+            //        var matchedCells = row.Where(c => !currentNote.Except(c.Note).Any()).ToArray();
+            //        if (matchedCells.Length == 1)
+            //        {
+            //            matchedCells[0].Value = currentNum;
+            //            matchedCells[0].Note = new List<int>();
+            //            ClearMatchedNote(matchedCells[0].Y, matchedCells[0].X, currentNum);
+            //        }
+            //    }
+
+            //    //9.2
+            //    var cols = cells.GroupBy(c => c.X).Select(c => c.ToList());
+            //    foreach (var col in cols)
+            //    {
+            //        var matchedCells = col.Where(c => !currentNote.Except(c.Note).Any()).ToArray();
+            //        if (matchedCells.Length == 1)
+            //        {
+            //            matchedCells[0].Value = currentNum;
+            //            matchedCells[0].Note = new List<int>();
+            //            ClearMatchedNote(matchedCells[0].Y, matchedCells[0].X, currentNum);
+            //        }
+            //    }
+
+            //    //9.3
+            //    var bigCells = GetBigCells();
+            //    foreach (var bigCell in bigCells)
+            //    {
+            //        var matchedCells = bigCell.Where(c => !currentNote.Except(c.Note).Any()).ToArray();
+            //        if (matchedCells.Length == 1)
+            //        {
+            //            matchedCells[0].Value = currentNum;
+            //            matchedCells[0].Note = new List<int>();
+            //            ClearMatchedNote(matchedCells[0].Y, matchedCells[0].X, currentNum);
+            //        }
+            //    }
+            //}
+        }
+
+        private void CheckNoteInBigCellToClearOtherNotes()
+        {
+            var bigCells = GetBigCells();
+            //10
+            foreach (var bigCell in bigCells)
+            {
+                //10.1
+                var rows = bigCell.GroupBy(c => c.Y).Select(c => c.ToList()).ToList();
+
+                List<int> rowNotes = new List<int>();
+                rowNotes.AddRange(rows[0].SelectMany(c => c.Note).Distinct());
+                rowNotes.AddRange(rows[1].SelectMany(c => c.Note).Distinct());
+                rowNotes.AddRange(rows[2].SelectMany(c => c.Note).Distinct());
+
+                List<int> duplicateInRows = rowNotes.GroupBy(c => c).SelectMany(c => c.Skip(1)).Distinct().ToList();
+                rowNotes.RemoveAll(c => duplicateInRows.Contains(c));
+                if (rowNotes.Count > 0)
+                {
+                    foreach (int numNote in rowNotes)
+                    {
+                        Cell cellTemp = bigCell.First(c => c.Note.Contains(numNote));
+                        //10.2
+                        ClearMatchedNoteInOtherBigCellInBigRow(cellTemp.Y, cellTemp.BigX, numNote);
+                    }
+                }
+
+                //10.3
+                var cols = bigCell.GroupBy(c => c.X).Select(c => c.ToList()).ToList();
+
+                List<int> colNotes = new List<int>();
+                colNotes.AddRange(cols[0].SelectMany(c => c.Note).Distinct());
+                colNotes.AddRange(cols[1].SelectMany(c => c.Note).Distinct());
+                colNotes.AddRange(cols[2].SelectMany(c => c.Note).Distinct());
+
+                List<int> duplicateInCols = colNotes.GroupBy(c => c).SelectMany(c => c.Skip(1)).Distinct().ToList();
+                colNotes.RemoveAll(c => duplicateInCols.Contains(c));
+                if (colNotes.Count > 0)
+                {
+                    foreach (int numNote in colNotes)
+                    {
+                        Cell cellTemp = bigCell.First(c => c.Note.Contains(numNote));
+                        //10.4
+                        ClearMatchedNoteInOtherBigCellInBigCol(cellTemp.X, cellTemp.BigY, numNote);
+                    }
+                }
+            }
+        }
+
+        private void CheckIfNoteHaveOneNumber()
+        {
+            //11
+            var oneNoteCells = cells.Where(c => c.Note.Count == 1);
+            foreach (var cell in oneNoteCells)
+            {
+                //11.1
+                cell.Value = cell.Note[0];
+                //11.2
+                ClearMatchedNote(cell.Y, cell.X, cell.Value);
+            }
+        }
+
+        private void TakeNote()
+        {
+            var blankCells = cells.Where(c => c.Value == 0);
+            foreach (var cell in blankCells)
+            {
+                cell.Note = GetNumbersValidForCell(cell.Y, cell.X);
+            }
+        }
+
+        private void ClearMatchedNote(int y, int x, int num)
+        {
+            var row = cells.Where(c => c.Y == y && c.Note.Contains(num));
+            foreach (var cell in row)
+            {
+                cell.Note.Remove(num);
+            }
+
+            var col = cells.Where(c => c.X == x && c.Note.Contains(num));
+            foreach (var cell in col)
+            {
+                cell.Note.Remove(num);
+            }
+
+            var cellTemp = cells.First(c => c.X == x && c.Y == y);
+            var bigCell = cells.Where(c => c.BigX == cellTemp.BigX && c.BigY == cellTemp.BigY 
+                                        && c.Note.Contains(num));
+            foreach (var cell in bigCell)
+            {
+                cell.Note.Remove(num);
+            }
+        }
+
+        private void ClearMatchedNoteInOtherBigCellInBigRow(int y, int bigX, int num)
+        {
+            var row = cells.Where(c => c.Y == y && c.BigX != bigX && c.Note.Contains(num));
+            foreach (var cell in row)
+            {
+                cell.Note.Remove(num);
+            }
+        }
+
+        private void ClearMatchedNoteInOtherBigCellInBigCol(int x, int bigY, int num)
+        {
+            var col = cells.Where(c => c.X == x && c.BigY != bigY && c.Note.Contains(num));
+            foreach (var cell in col)
+            {
+                cell.Note.Remove(num);
+            }
         }
 
         private void CheckRowsHaveOneBlank()
@@ -229,7 +505,7 @@ namespace sudokuSolver
 
         private void CheckBigCellsHaveOneBlank()
         {
-            var bigCells = cells.GroupBy(c => new { c.BigX, c.BigY }).Select(g => g.ToList());
+            var bigCells = GetBigCells();
             foreach (var bigCell in bigCells)
             {
                 var zeroCells = bigCell.Where(c => c.Value == 0).ToArray();
@@ -477,6 +753,14 @@ namespace sudokuSolver
 
             return result;
         }
+        private List<int> GetNumbersValidForCell(int y, int x)
+        {
+            List<int> result = new List<int>();
+            List<int> numbersNotValid = GetNumbersNotValidForCell(y, x);
+            result = FullNumbers.Except(numbersNotValid).ToList();
+
+            return result;
+        }
 
         private void CheckIfOnlyOneNumberValid()
         {
@@ -491,6 +775,29 @@ namespace sudokuSolver
                 }
             }
         }
+
+        private IEnumerable<List<Cell>> GetBigCells()
+        {
+            return cells.GroupBy(c => new { c.BigX, c.BigY }).Select(c => c.ToList());
+        }
+
+        private void dataGridView1_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            DataGridViewCellStyle style = new DataGridViewCellStyle();
+            style.BackColor = Color.BlueViolet;
+            foreach (DataGridViewRow row in dataGridView1.Rows)
+            {
+                foreach (DataGridViewCell cell in row.Cells)
+                {
+                    if (cell.RowIndex > 2 && cell.RowIndex < 6
+                        && cell.ColumnIndex > 2 && cell.ColumnIndex < 6)
+                    {
+                        cell.Style = style;
+                    }
+                }
+            }
+        }
+
     }
 
     public class DisplayObject
