@@ -216,56 +216,124 @@ namespace sudokuSolver
 
             #endregion
 
+            //bool isNew = true;
+            //while (isNew)
+            //{
+            //    ResetChangeFlags();
+
+            //    //1
+            //    CheckRowsHaveOneBlank();
+            //    //2
+            //    CheckColumnsHaveOneBlank();
+            //    //3
+            //    CheckBigCellsHaveOneBlank();
+
+            //    //4
+            //    CheckBigRowsAndBigCols();
+
+            //    //5
+            //    CheckBlankCelsOnRows();
+            //    //6
+            //    CheckBlankCelsOnCols();
+
+            //    //7
+            //    CheckIfOnlyOneNumberValid();
+
+            //    isNew = cells.Any(c => c.IsChanged);
+            //}
+
+            //if (cells.Any(c => c.Value == 0))
+            //{
+            //    //8
+            //    TakeNote();
+            //    //9
+
+            //    isNew = true;
+            //    while (isNew)
+            //    {
+            //        ResetChangeFlags();
+
+            //        CheckIfNumberInNoteIsUniqueInUnit();
+
+            //        int cntOfNotes = cells.SelectMany(c => c.Note).Count();
+            //        CheckNoteInBigCellToClearOtherNotes();
+            //        CheckIfNoteHaveOneNumber();
+            //        CheckIfSetOfNumbersInNoteIsUniqueInUnit();
+            //        int newCntOfNote = cells.SelectMany(c => c.Note).Count();
+
+            //        isNew = cells.Any(c => c.IsChanged) || cntOfNotes != newCntOfNote;
+            //    }
+            //}
+
+            #region new idea
+
+            TakeNote();
             bool isNew = true;
+
             while (isNew)
             {
                 ResetChangeFlags();
 
-                //1
-                CheckRowsHaveOneBlank();
-                //2
-                CheckColumnsHaveOneBlank();
-                //3
-                CheckBigCellsHaveOneBlank();
+                int cntOfNotes = cells.SelectMany(c => c.Note).Count();
 
-                //4
-                CheckBigRowsAndBigCols();
+                CheckIfNoteHaveOneItem();
+                CheckIfOneNoteNumberInAUnit();
 
-                //5
-                CheckBlankCelsOnRows();
-                //6
-                CheckBlankCelsOnCols();
+                int newCntOfNote = cells.SelectMany(c => c.Note).Count();
 
-                //7
-                CheckIfOnlyOneNumberValid();
-
-                isNew = cells.Any(c => c.IsChanged);
+                isNew = cells.Any(c => c.IsChanged) || cntOfNotes != newCntOfNote;
             }
 
-            if (cells.Any(c => c.Value == 0))
-            {
-                //8
-                TakeNote();
-                //9
-
-                isNew = true;
-                while (isNew)
-                {
-                    ResetChangeFlags();
-
-                    CheckIfNumberInNoteIsUniqueInUnit();
-
-                    int cntOfNotes = cells.SelectMany(c => c.Note).Count();
-                    CheckNoteInBigCellToClearOtherNotes();
-                    CheckIfNoteHaveOneNumber();
-                    CheckIfSetOfNumbersInNoteIsUniqueInUnit();
-                    int newCntOfNote = cells.SelectMany(c => c.Note).Count();
-
-                    isNew = cells.Any(c => c.IsChanged) || cntOfNotes != newCntOfNote;
-                }
-            }
+            #endregion
 
             ShowValueToGrid();
+        }
+
+        private void CheckIfNoteHaveOneItem()
+        {
+            var oneNoteCells = cells.Where(c => c.Note.Count == 1);
+            foreach (var cell in oneNoteCells)
+            {
+                cell.Value = cell.Note.First();
+                ClearMatchedNote(cell.Y, cell.X, cell.Value);
+            }
+        }
+
+        /// <summary>
+        /// check if the number in note only in an unit (row, col, big cell)
+        /// </summary>
+        private void CheckIfOneNoteNumberInAUnit()
+        {
+            var rows = GetRows();
+            var cols = GetColumns();
+            var bigCells = GetBigCells();
+
+            for (int number = 1; number <= 9; number++)
+            {
+                var rowTemps = rows.Where(c => c.SelectMany(x => x.Note).Count(x => x == number) == 1);
+                foreach (var row in rowTemps)
+                {
+                    var cell = row.First(c => c.Note.Contains(number));
+                    cell.Value = number;
+                    ClearMatchedNote(cell.Y, cell.X, number);
+                }
+
+                var colTemps = cols.Where(c => c.SelectMany(x => x.Note).Count(x => x == number) == 1);
+                foreach (var col in colTemps)
+                {
+                    var cell = col.First(c => c.Note.Contains(number));
+                    cell.Value = number;
+                    ClearMatchedNote(cell.Y, cell.X, number);
+                }
+
+                var bigCellTemps = rows.Where(c => c.SelectMany(x => x.Note).Count(x => x == number) == 1);
+                foreach (var bigCell in bigCellTemps)
+                {
+                    var cell = bigCell.First(c => c.Note.Contains(number));
+                    cell.Value = number;
+                    ClearMatchedNote(cell.Y, cell.X, number);
+                }
+            }
         }
 
         private void CheckIfNumberInNoteIsUniqueInUnit()
@@ -447,6 +515,8 @@ namespace sudokuSolver
             }
 
             var cellTemp = cells.First(c => c.X == x && c.Y == y);
+            cellTemp.Note = new List<int>();
+
             var bigCell = cells.Where(c => c.BigX == cellTemp.BigX && c.BigY == cellTemp.BigY 
                                         && c.Note.Contains(num));
             foreach (var cell in bigCell)
@@ -776,9 +846,19 @@ namespace sudokuSolver
             }
         }
 
+        private IEnumerable<List<Cell>> GetRows()
+        {
+            return cells.GroupBy(c => c.Y).Select(g => g.ToList());
+        }
+
+        private IEnumerable<List<Cell>> GetColumns()
+        {
+            return cells.GroupBy(c => c.X).Select(g => g.ToList());
+        }
+
         private IEnumerable<List<Cell>> GetBigCells()
         {
-            return cells.GroupBy(c => new { c.BigX, c.BigY }).Select(c => c.ToList());
+            return cells.GroupBy(c => new { c.BigX, c.BigY }).Select(g => g.ToList());
         }
 
         private void dataGridView1_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
